@@ -52,8 +52,8 @@ pre{white-space:pre-wrap;font-size:12px;background:#faf6f0;padding:10px;border-r
 
 <div class="card">
 <h2>📤 方式一：上传文件</h2>
-<div class="row"><label>选择docx文件</label><input type="file" id="fileInput" accept=".docx" multiple></div>
-<p class="tip">建议将doc格式转为docx后上传，一次可选多个文件</p>
+<div class="row"><label>选择docx文件</label><input type="file" id="fileInput" accept=".doc,.docx" multiple></div>
+<p class="tip">支持doc和docx格式，直接上传即可，一次可选多个文件</p>
 </div>
 
 <div class="card">
@@ -102,6 +102,65 @@ function readDocxText(file) {
                     });
                 }).catch(function(e) { reject(new Error('解压失败: ' + e.message)); });
             } catch(e) { reject(new Error('读取失败: ' + e.message)); }
+        };
+        reader.onerror = function() { reject(new Error('文件读取失败')); };
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// ===== 读取doc文本（二进制解析）=====
+function readDocText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const buf = e.target.result;
+                // doc文件内部文本以UTF-16LE编码存储
+                // 尝试用UTF-16LE解码整个文件
+                const decoder = new TextDecoder('utf-16le', {fatal: false});
+                const fullText = decoder.decode(buf);
+                
+                // 过滤出可读的中文和英文字符
+                let result = '';
+                let current = '';
+                for (let i = 0; i < fullText.length; i++) {
+                    const c = fullText[i];
+                    const code = c.charCodeAt(0);
+                    // 保留中文、英文、数字、常见标点和换行
+                    if ((code >= 0x4E00 && code <= 0x9FFF) || // 中文
+                        (code >= 0x3000 && code <= 0x303F) || // 中文标点
+                        (code >= 0xFF00 && code <= 0xFFEF) || // 全角字符
+                        (code >= 0x20 && code <= 0x7E) ||    // ASCII可打印
+                        code === 0x0A || code === 0x0D ||    // 换行
+                        code === 0x9 ||                      // 制表符
+                        (code >= 0x2010 && code <= 0x206F))  // 常见符号
+                    {
+                        current += c;
+                        if (current.length > 2) { result += c; }
+                    } else {
+                        if (current.length > 3) { result += '\n'; }
+                        current = '';
+                    }
+                }
+                
+                if (result.length < 100) {
+                    // 如果提取的文本太少，尝试另一种方式
+                    // 直接取整个解码文本中中文连续段落
+                    result = '';
+                    let chunk = '';
+                    for (let i = 0; i < fullText.length; i++) {
+                        const c = fullText[i];
+                        if ((c >= '\u4e00' && c <= '\u9fff') || c === '\n' || c === '\r') {
+                            chunk += c;
+                            if (chunk.length > 5) { result += c; }
+                        } else {
+                            chunk = '';
+                        }
+                    }
+                }
+                
+                resolve(result || '未能从doc中提取文本，建议转docx后重试');
+            } catch(e) { reject(new Error('doc读取失败: ' + e.message)); }
         };
         reader.onerror = function() { reject(new Error('文件读取失败')); };
         reader.readAsArrayBuffer(file);
@@ -162,7 +221,12 @@ async function startExtract() {
         const file = files[i];
         showStatus('读取文件: ' + file.name, 'load');
         try {
-            const text = await readDocxText(file);
+            let text;
+            if (file.name.endsWith('.docx')) {
+                text = await readDocxText(file);
+            } else {
+                text = await readDocText(file);
+            }
             tasks.push({text: text, name: file.name});
         } catch(e) {
             showStatus('❌ 读取失败: ' + file.name + ' - ' + e.message, 'err');
