@@ -12,12 +12,12 @@ h2{color:#8b4513;font-size:16px;margin:15px 0 8px;border-bottom:2px solid #d4a04
 .card{background:#fff;border:1px solid #d4a04a;border-radius:10px;padding:15px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
 .row{display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 label{font-size:13px;color:#666;min-width:80px}
-input[type="file"],input[type="password"],input[type="text"]{flex:1;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:13px;min-width:200px}
+input[type="file"],input[type="password"],select{flex:1;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:13px;min-width:200px}
 input[type="password"]{width:300px}
+textarea{width:100%;height:200px;border:1px solid #ccc;border-radius:6px;padding:8px;font-size:13px;font-family:inherit}
 .btn{background:#8b4513;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;cursor:pointer;transition:0.2s;margin:4px}
 .btn:hover{background:#a0522d}
 .btn:disabled{opacity:0.5;cursor:not-allowed}
-.btn2{background:#d4a04a}
 .btn3{background:#4ecca3;color:#333}
 .status{padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0;display:none}
 .status.info{background:#e8f4e8;color:#2d7d2d;display:block}
@@ -26,318 +26,216 @@ input[type="password"]{width:300px}
 table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
 th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;word-break:break-all}
 th{background:#8b4513;color:#fff;position:sticky;top:0}
-td{background:#fff}
+td{background:#fff;font-size:11px}
 tr:nth-child(even) td{background:#faf6f0}
-.var-name{color:#8b4513;font-weight:bold;white-space:nowrap;min-width:120px}
+#resultArea{max-height:500px;overflow:auto}
 .tip{font-size:12px;color:#999;margin-top:4px}
 .hidden{display:none}
-#resultArea{max-height:500px;overflow:auto}
 .footer{text-align:center;font-size:11px;color:#aaa;margin-top:20px}
+pre{white-space:pre-wrap;font-size:12px;background:#faf6f0;padding:10px;border-radius:6px;max-height:300px;overflow:auto}
 </style>
 </head>
 <body>
 <h1>📋 中国农村调查 · 批量提取工具</h1>
 
-<!-- ===== 配置区 ===== -->
 <div class="card">
 <h2>⚙️ 配置</h2>
-<div class="row">
-<label>DeepSeek API Key</label>
-<input type="password" id="apiKey" placeholder="输入你的 DeepSeek API Key">
-</div>
+<div class="row"><label>DeepSeek API Key</label><input type="password" id="apiKey" placeholder="sk-..."></div>
 <div class="row">
 <label>模型</label>
-<select id="modelSel" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:6px;font-size:13px">
-<option value="deepseek-chat">DeepSeek Chat（最便宜）</option>
-<option value="deepseek-v4-flash" selected>DeepSeek V4 Flash（推荐）</option>
+<select id="modelSel">
+<option value="deepseek-chat">DeepSeek Chat</option>
+<option value="deepseek-v4-flash" selected>DeepSeek V4 Flash</option>
 </select>
 </div>
 </div>
 
-<!-- ===== 上传区 ===== -->
 <div class="card">
-<h2>📤 上传访谈文件</h2>
-<div class="row">
-<label>选择doc/docx文件</label>
-<input type="file" id="fileInput" accept=".doc,.docx" multiple>
-</div>
-<p class="tip">支持一次选多个文件批量提取。doc格式可能读取不完整，建议转docx。</p>
-<button class="btn" onclick="startExtract()" id="extractBtn">🚀 开始提取</button>
-<div class="status" id="statusMsg"></div>
+<h2>📤 方式一：上传文件</h2>
+<div class="row"><label>选择docx文件</label><input type="file" id="fileInput" accept=".docx" multiple></div>
+<p class="tip">建议将doc格式转为docx后上传，一次可选多个文件</p>
 </div>
 
-<!-- ===== 结果区 ===== -->
+<div class="card">
+<h2>📝 方式二：粘贴文本</h2>
+<div class="row"><label>粘贴访谈内容</label></div>
+<textarea id="textInput" placeholder="把访谈内容直接粘贴到这里..."></textarea>
+</div>
+
+<button class="btn" onclick="startExtract()" id="extractBtn">🚀 开始提取</button>
+<div class="status" id="statusMsg">准备就绪</div>
+
 <div class="card hidden" id="resultCard">
 <h2>📊 提取结果</h2>
 <button class="btn btn3" onclick="exportCSV()">📥 导出CSV</button>
 <div id="resultArea"></div>
 </div>
 
-<div class="footer">Powered by DeepSeek · 数据仅保存在您的浏览器本地</div>
+<div class="footer">Powered by DeepSeek · 数据仅保存在浏览器本地</div>
 
 <script>
-// ===== 变量清单（完整75个）=====
-const VARIABLES = {
-    '模块一：受访者基本信息': [
-        '受访者编号','受访者姓名','性别','出生年份','首次采访时间','首访时年龄','籍贯',
-        '土改时阶级成分','土改时是否干部','干部经历','曾担任的干部具体职务','是否党员',
-        '个人经历简述','现家庭人口','现承包地面积','现承包林地面积','现承包水塘面积','所在社区基本情况'
-    ],
-    '模块二：土改前的基础和背景-家庭基本情况': [
-        '土改前家庭人口数','土改前劳动力人数','土改前劳动力是否紧缺'
-    ],
-    '模块二：家庭经济情况': [
-        '土改前生活水平自评','土改前主要收入来源','土改前是否欠债','土改前是否放债'
-    ],
-    '模块二：土地经营情况': [
-        '土改前自有土地数量','土改前租入土地数量','土改前租出土地数量','土改前经营土地总面积',
-        '地租形式','土改前是否拥有耕牛','土改前农具是否齐全','土改前换工行为','土改前赋税负担感受'
-    ],
-    '模块二：社会交往情况': [
-        '土改前与地主关系','土改前与贫雇农关系','土改前宗族势力'
-    ],
-    '模块二：土地观念': [
-        '土改前对土地渴望程度','土改前是否听说要土改','听说土改时的反应','土改前对共产党印象'
-    ],
-    '模块三：访贫问苦与组织': [
-        '对工作队公正性评价','是否听过土改宣传','参加土改会议积极性','是否为土改积极分子','是否参加农会贫协会'
-    ],
-    '模块三：划分阶级成分': [
-        '土改最终划定成分','对划分成分接受度','是否对地主表示同情','参与斗地主诉苦程度'
-    ],
-    '模块三：没收与分配': [
-        '是否分到土地','分得土地数量','是否分到其他财产','分到的主要财产','对分得土地质量满意度','对分配公平性看法'
-    ],
-    '模块三：土改复查': [
-        '是否经历土改复查','是否颁发土地证'
-    ],
-    '模块四：土地经营': [
-        '土改后家庭土地总面积','土改后粮食产量变化','土改后生产积极性变化','土改后土地是否有买卖租赁'
-    ],
-    '模块四：家庭生活': [
-        '土改后生活水平变化','土改后粮食够吃程度','对地主家土改后生活描述'
-    ],
-    '模块四：社会交往': [
-        '土改后与地主家庭交往','与其他农户关系变化','土改后与村干部关系','土改后社会地位感受'
-    ],
-    '模块四：观念变化': [
-        '土改后土地观','土改后阶级人际观','土改后对共产党拥护程度','对土改运动整体评价','对土改印象最深的事'
-    ],
-    '模块四：对集体化的影响': [
-        '入社时间','对集体化态度','对集体化作用评价'
-    ]
-};
-
-// 拍平成数组
-let VAR_NAMES = [];
-let VAR_MODULES = {};
-for (let mod in VARIABLES) {
-    VARIABLES[mod].forEach(v => { VAR_NAMES.push(v); VAR_MODULES[v] = mod; });
-}
+// ===== 变量清单 =====
+const VAR_LIST = [
+'受访者编号','受访者姓名','性别','出生年份','首次采访时间','首访时年龄','籍贯','土改时阶级成分','土改时是否干部','干部经历','曾担任的干部具体职务','是否党员','个人经历简述','现家庭人口','现承包地面积','现承包林地面积','现承包水塘面积','所在社区基本情况','土改前家庭人口数','土改前劳动力人数','土改前劳动力是否紧缺','土改前生活水平自评','土改前主要收入来源','土改前是否欠债','土改前是否放债','土改前自有土地数量','土改前租入土地数量','土改前租出土地数量','土改前经营土地总面积','地租形式','土改前是否拥有耕牛','土改前农具是否齐全','土改前换工行为','土改前赋税负担感受','土改前与地主关系','土改前与贫雇农关系','土改前宗族势力','土改前对土地渴望程度','土改前是否听说要土改','听说土改时的反应','土改前对共产党印象','对工作队公正性评价','是否听过土改宣传','参加土改会议积极性','是否为土改积极分子','是否参加农会贫协会','土改最终划定成分','对划分成分接受度','是否对地主表示同情','参与斗地主诉苦程度','是否分到土地','分得土地数量','是否分到其他财产','分到的主要财产','对分得土地质量满意度','对分配公平性看法','是否经历土改复查','是否颁发土地证','土改后家庭土地总面积','土改后粮食产量变化','土改后生产积极性变化','土改后土地是否有买卖租赁','土改后生活水平变化','土改后粮食够吃程度','对地主家土改后生活描述','土改后与地主家庭交往','与其他农户关系变化','土改后与村干部关系','土改后社会地位感受','土改后土地观','土改后阶级人际观','土改后对共产党拥护程度','对土改运动整体评价','对土改印象最深的事','入社时间','对集体化态度','对集体化作用评价'
+];
 
 let allResults = [];
 
-// ===== docx读取 =====
-function readFileAsText(file) {
+// ===== 读取docx文本 =====
+function readDocxText(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = e => reject(e.target.error);
+        reader.onload = function(e) {
+            try {
+                const zip = new JSZip();
+                zip.loadAsync(e.target.result).then(function(zipData) {
+                    const docFile = zipData.file('word/document.xml');
+                    if (!docFile) { reject(new Error('不是有效的docx文件')); return; }
+                    docFile.async('string').then(function(xml) {
+                        const texts = [];
+                        const matches = xml.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+                        if (matches) matches.forEach(function(m) {
+                            const text = m.replace(/<[^>]+>/g, '');
+                            if (text.trim()) texts.push(text);
+                        });
+                        resolve(texts.join(''));
+                    });
+                }).catch(function(e) { reject(new Error('解压失败: ' + e.message)); });
+            } catch(e) { reject(new Error('读取失败: ' + e.message)); }
+        };
+        reader.onerror = function() { reject(new Error('文件读取失败')); };
         reader.readAsArrayBuffer(file);
     });
 }
 
-function extractDocxText(arrayBuffer) {
-    // 使用JSZip解压docx
-    return JSZip.loadAsync(arrayBuffer).then(zip => {
-        const docFile = zip.file('word/document.xml');
-        if (!docFile) throw new Error('无法读取文档内容（可能不是docx格式）');
-        return docFile.async('string');
-    }).then(xml => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(xml, 'text/xml');
-        const texts = [];
-        const tEls = doc.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-        for (let t of tEls) {
-            if (t.textContent) texts.push(t.textContent);
-        }
-        return texts.join('');
-    });
-}
+// ===== DeepSeek调用 =====
+async function extractWithAI(text, name, apiKey, model) {
+    const prompt = '你是一个中国农村土地改革口述史研究者。请从以下访谈文本中提取结构化数据，输出为JSON格式。\n\n文件名：' + name + '\n\n访谈文本：\n---\n' + text.substring(0,8000) + '\n---\n\n请提取以下变量（每个变量一行）：\n' + VAR_LIST.map(v=>'- '+v).join('\n') + '\n\n要求：\n1. 找不到的信息填"无数据"\n2. 数值填数字，文本填文本\n3. 分类字段从选项中选择\n4. 注意土地面积单位换算\n5. 只输出JSON对象，不要其他文字';
 
-// ===== DeepSeek API调用 =====
-async function callDeepSeek(prompt, apiKey, model) {
     const resp = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+apiKey},
         body: JSON.stringify({
             model: model || 'deepseek-chat',
             messages: [
-                { role: 'system', content: '你是一个中国农村土地改革口述史研究者，精通从访谈文本中提取结构化数据。请严格按照要求输出JSON格式数据。' },
-                { role: 'user', content: prompt }
+                {role:'system', content:'你是一个中国农村土地改革口述史研究者，请严格按照要求输出JSON格式数据。'},
+                {role:'user', content: prompt}
             ],
-            temperature: 0.1,
-            response_format: { type: 'json_object' }
+            temperature: 0.1
         })
     });
     if (!resp.ok) {
         const err = await resp.text();
-        throw new Error('API请求失败: ' + resp.status + ' ' + err);
+        throw new Error('API请求失败: ' + resp.status + ' ' + err.substring(0,200));
     }
     const data = await resp.json();
-    return JSON.parse(data.choices[0].message.content);
+    const content = data.choices[0].message.content;
+    // 尝试从回复中提取JSON
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    return JSON.parse(content);
 }
 
-// ===== 构建提取提示词 =====
-function buildPrompt(text, fileName) {
-    const varList = VAR_NAMES.map(v => '- ' + v + '：').join('\n');
-    return `你正在从一份中国农村调查口述史访谈中提取结构化数据。
-文件名：${fileName}
-
-访谈文本内容如下：
----
-${text.substring(0, 8000)}
----
-
-请从以上文本中提取以下变量，输出为JSON格式。注意：
-1. 如果文本中找不到某个变量的信息，请填"无数据"
-2. 数值型字段请填数字，文本型字段请填文本
-3. 分类字段请从选项中选择，不要自己发明
-4. 特别注意文本中提到的土地面积单位换算
-5. 输出格式必须严格为JSON对象，键名为：
-
-${varList}
-
-请只输出JSON，不要包含其他说明文字。`;
-}
-
-// ===== 主提取流程 =====
+// ===== 主流程 =====
 async function startExtract() {
     const apiKey = document.getElementById('apiKey').value.trim();
     const model = document.getElementById('modelSel').value;
     const files = document.getElementById('fileInput').files;
+    const pasteText = document.getElementById('textInput').value.trim();
 
     if (!apiKey) { showStatus('请先输入DeepSeek API Key！', 'err'); return; }
-    if (files.length === 0) { showStatus('请选择至少一个文件！', 'err'); return; }
+    if (files.length === 0 && !pasteText) { showStatus('请上传文件或粘贴文本！', 'err'); return; }
 
-    showStatus('正在准备提取 ' + files.length + ' 个文件...', 'load');
     document.getElementById('extractBtn').disabled = true;
     allResults = [];
 
-    // 加载JSZip
-    if (typeof JSZip === 'undefined') {
-        await loadJSZip();
+    // 收集所有要处理的文本
+    let tasks = [];
+
+    // 粘贴文本
+    if (pasteText) {
+        tasks.push({text: pasteText, name: '粘贴文本'});
     }
 
+    // 上传文件
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        showStatus('正在处理 (' + (i+1) + '/' + files.length + '): ' + file.name, 'load');
-
+        showStatus('读取文件: ' + file.name, 'load');
         try {
-            let text = '';
-            if (file.name.endsWith('.docx')) {
-                const buf = await readFileAsText(file);
-                text = await extractDocxText(buf);
-            } else if (file.name.endsWith('.doc')) {
-                // doc格式有限支持 - 提示用户转换
-                text = '【注意：.doc格式读取不完整，建议转docx后重试】';
-                const buf = await readFileAsText(file);
-                // 尝试提取纯文本
-                const decoder = new TextDecoder('utf-8');
-                const raw = decoder.decode(buf);
-                // 提取可读文本
-                text = raw.replace(/[\\x00-\\x08\\x0b-\\x0c\\x0e-\\x1f]/g, ' ').substring(0, 5000);
-            } else {
-                throw new Error('不支持的文件格式');
-            }
-
-            const prompt = buildPrompt(text, file.name);
-            const result = await callDeepSeek(prompt, apiKey, model);
-
-            // 确保所有变量都存在
-            const row = { '文件名': file.name };
-            VAR_NAMES.forEach(v => { row[v] = result[v] || '无数据'; });
-            allResults.push(row);
-
-            showStatus('✅ (' + (i+1) + '/' + files.length + ') ' + file.name + ' 提取完成', 'info');
+            const text = await readDocxText(file);
+            tasks.push({text: text, name: file.name});
         } catch(e) {
-            showStatus('❌ (' + (i+1) + '/' + files.length + ') ' + file.name + ' 失败: ' + e.message, 'err');
-            allResults.push({ '文件名': file.name, '错误': e.message });
+            showStatus('❌ 读取失败: ' + file.name + ' - ' + e.message, 'err');
+            allResults.push({文件名: file.name, 错误: '读取失败: ' + e.message});
+        }
+    }
+
+    // 逐个调用API提取
+    for (let i = 0; i < tasks.length; i++) {
+        const task = tasks[i];
+        showStatus('正在提取 (' + (i+1) + '/' + tasks.length + '): ' + task.name, 'load');
+        try {
+            const result = await extractWithAI(task.text, task.name, apiKey, model);
+            const row = {文件名: task.name};
+            VAR_LIST.forEach(v => { row[v] = result[v] || '无数据'; });
+            allResults.push(row);
+            showStatus('✅ ' + task.name + ' 完成', 'info');
+        } catch(e) {
+            showStatus('❌ ' + task.name + ' 失败: ' + e.message, 'err');
+            allResults.push({文件名: task.name, 错误: e.message});
         }
     }
 
     showResults();
     document.getElementById('extractBtn').disabled = false;
-    showStatus('✅ 全部完成！共处理 ' + files.length + ' 个文件', 'info');
+    showStatus('✅ 完成！共处理 ' + tasks.length + ' 份', 'info');
 }
 
-// ===== 显示结果 =====
 function showResults() {
     if (allResults.length === 0) return;
     document.getElementById('resultCard').classList.remove('hidden');
-
     let html = '<table><thead><tr><th>#</th><th>文件名</th>';
-    // 只显示有数据的不同变量
     const keys = Object.keys(allResults[0]);
     keys.forEach(k => { if (k !== '文件名' && k !== '错误') html += '<th>' + k + '</th>'; });
     if (allResults[0]['错误']) html += '<th>错误</th>';
     html += '</tr></thead><tbody>';
-
     allResults.forEach((row, idx) => {
-        html += '<tr><td>' + (idx+1) + '</td><td style="white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis">' + (row['文件名'] || '') + '</td>';
-        keys.forEach(k => {
-            if (k !== '文件名' && k !== '错误') html += '<td>' + (row[k] || '') + '</td>';
-        });
+        html += '<tr><td>' + (idx+1) + '</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (row['文件名']||'') + '</td>';
+        keys.forEach(k => { if (k!=='文件名' && k!=='错误') html += '<td>' + (row[k]||'') + '</td>'; });
         if (row['错误']) html += '<td style="color:#c0392b">' + row['错误'] + '</td>';
         html += '</tr>';
     });
-
     html += '</tbody></table>';
     document.getElementById('resultArea').innerHTML = html;
 }
 
-// ===== 导出CSV =====
 function exportCSV() {
     if (allResults.length === 0) return;
     const keys = Object.keys(allResults[0]);
-    let csv = '\uFEFF'; // BOM for Excel
+    let csv = '\uFEFF';
     csv += keys.join(',') + '\n';
     allResults.forEach(row => {
         const vals = keys.map(k => {
-            let v = (row[k] || '').toString();
-            if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-                v = '"' + v.replace(/"/g, '""') + '"';
-            }
+            let v = (row[k]||'').toString();
+            if (v.includes(',')||v.includes('"')||v.includes('\n')) v = '"'+v.replace(/"/g,'""')+'"';
             return v;
         });
         csv += vals.join(',') + '\n';
     });
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = '中国农村调查提取结果_' + new Date().toISOString().slice(0,10) + '.csv';
+    link.download = '提取结果_' + new Date().toISOString().slice(0,10) + '.csv';
     link.click();
     URL.revokeObjectURL(link.href);
 }
 
-// ===== 状态提示 =====
 function showStatus(msg, type) {
     const el = document.getElementById('statusMsg');
     el.className = 'status ' + type;
     el.textContent = msg;
 }
-
-// ===== 加载JSZip =====
-function loadJSZip() {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-    });
-}
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
 </html>
